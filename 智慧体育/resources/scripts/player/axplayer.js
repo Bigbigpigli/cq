@@ -28,32 +28,17 @@ function setUpController() {
     //-----------------------------------------
     var _globalVars = {};
 
-    //-----------------------------------------
-    //Used by getLinkUrl below to check if local server is running 
-    //in order to send back the global variables as a query string
-    //in the page url
-    //-----------------------------------------
-    var _shouldSendVarsToServer = function () {
-        //If exception occurs (due to page in content frame being from a different domain, etc)
-        //then run the check without the url (which will end up checking against sitemap url)
-        try {
-            var mainFrame = document.getElementById("mainFrame");
-            return $axure.shouldSendVarsToServer(mainFrame.contentWindow.location.href);
-        } catch (e) {
-            return $axure.shouldSendVarsToServer();
-        }
-    };
-
-    var _getLinkUrl = function (baseUrl) {
+    var _getLinkUrl = function(baseUrl, viewId) {
         var toAdd = '';
         for(var globalVarName in _globalVars) {
             var val = _globalVars[globalVarName];
-            if(val != null) {
+            if(val != null && val.length > 0) {
                 if(toAdd.length > 0) toAdd += '&';
                 toAdd += globalVarName + '=' + encodeURIComponent(val);
             }
         }
-        return toAdd.length > 0 ? baseUrl + (_shouldSendVarsToServer() ? '?' : '#') + toAdd + "&CSUM=1" : baseUrl;
+        var viewOverride = viewId ? '&AXVIEWIDOVERRIDE=' + viewId : '';
+        return toAdd.length > 0 || viewId ? baseUrl + '#' + toAdd + viewOverride + '&CSUM=1' : baseUrl;
     };
     $axure.getLinkUrlWithVars = _getLinkUrl;
 
@@ -75,7 +60,7 @@ function setUpController() {
     // this method should test if it is actually a axure rp page being loaded and properly set
     // up all the controller for the page if it is
     // ---------------------------------------------
-    _page.navigate = function (url, includeVariables) {
+    _page.navigate = function (url, includeVariables, viewId) {
         var mainFrame = document.getElementById("mainFrame");
         //var mainFrame = window.parent.mainFrame;
         // if this is a relative url...
@@ -91,7 +76,7 @@ function setUpController() {
             mainFrame.contentWindow.location.href = urlToLoad;
             return;
         }
-        var urlWithVars = $axure.getLinkUrlWithVars(urlToLoad);
+        var urlWithVars = $axure.getLinkUrlWithVars(urlToLoad, viewId);
         var currentData = $axure.messageCenter.getState('page.data');
         var currentUrl = currentData && currentData.location;
         if(currentUrl && currentUrl.indexOf('#') != -1) currentUrl = currentUrl.substring(0, currentUrl.indexOf('#'))
@@ -107,7 +92,6 @@ function setUpController() {
     };
 
     var pluginIds = [];
-    var plugins = {};
     var currentVisibleHostId = null;
     // ---------------------------------------------
     // Adds a tool box frame from a url to the interface. This is useful for loading plugins
@@ -124,55 +108,38 @@ function setUpController() {
         if (!settings.id) throw ('each plugin host needs an id');
 
         var host = $('<div id=' + settings.id + '></div>')
-            .appendTo('#interfaceControlFrameHostContainer');
+            .appendTo('#interfaceControlFrameContainer');
 
-        host.hide();
+        var isCurrentDefault = (pluginIds.length == 0);
+        if (!isCurrentDefault) {
+            host.hide();
+        } else {
+            currentVisibleHostId = settings.id;
+        }
 
-        var headerLink = $('<a pluginId="' + settings.id + '" >' + settings.title.toUpperCase() + '</a>');
+
+        //$('#interfaceControlFrameHeader').append('<li>' + settings.title + '</li>');
+        var headerLink = $('<a pluginId="' + settings.id + '" >' + settings.title + '</a>');
 
         headerLink
-            .click($axure.utils.curry(interfaceControlHeaderButton_click, settings.id)).wrap('<li id="' + settings.id + 'Btn">');
+            .click($axure.utils.curry(interfaceControlHeaderButton_click, settings.id)).wrap('<li>')
+            .parent().appendTo('#interfaceControlFrameHeader');
 
-        if((settings.id == 'feedbackHost' || settings.id == 'feedbackContainer') && pluginIds[pluginIds.length - 1] == 'debugHost') headerLink.parent().insertBefore('#debugHostBtn');
-        else headerLink.parent().appendTo('#interfaceControlFrameHeader');
-        
+        if (isCurrentDefault) {
+            headerLink.addClass('selected');
+        }
+
         pluginIds[pluginIds.length] = settings.id;
-        plugins[settings.id] = settings;
-
-        $(document).trigger('pluginCreated', [settings.gid]);
     };
 
     // private methods
     var interfaceControlHeaderButton_click = function (id) {
-        var clickedPlugin = $('#interfaceControlFrameHeader a[pluginId=' + id + ']');
-        if(clickedPlugin.hasClass('selected')) {
-            clickedPlugin.removeClass('selected');
-            $('#' + id).hide();
-            _player.collapseToBar();
+        $('#interfaceControlFrameHeader a').removeClass('selected');
+        $('#interfaceControlFrameHeader a[pluginId=' + id + ']').addClass('selected');
 
-            $(document).trigger('pluginShown',['']);
-        } else {
-            $('#interfaceControlFrameHeader a').removeClass('selected');
-            clickedPlugin.addClass('selected');
-
-            $('#' + currentVisibleHostId).hide();
-            $('#' + id).show();
-            currentVisibleHostId = id;
-            _player.expandFromBar();
-
-            $(document).trigger('pluginShown', [plugins[id].gid]);
-        }
-
-        $(document).trigger('ContainerHeightChange');
-    };
-
-    $axure.player.showPlugin = function(gid) {
-        for(var id in plugins) {
-            if(plugins[id].gid == gid) {
-                $('a[pluginId="' + id + '"]').click();
-                break;
-            }
-        }
+        $('#' + currentVisibleHostId).hide();
+        $('#' + id).show();
+        currentVisibleHostId = id;
     };
 }
 

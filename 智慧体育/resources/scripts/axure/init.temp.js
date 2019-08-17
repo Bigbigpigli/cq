@@ -13,73 +13,36 @@
             notes: $ax.pageData.page.notes
         };
 
-        var anns = [];
-        $ax('*').each(function (dObj, elementId) {
-            pushAnnotation(dObj, elementId);
-        });
-
-        function pushAnnotation(dObj, elementId) {
-            var ann = dObj.annotation;
-            if(ann) {
-                ann["id"] = elementId;
-                ann["label"] = dObj.label + " (" + dObj.friendlyType + ")";
-                anns.push(ann);
-            }
-
-            if(dObj.type == 'repeater') {
-                if(dObj.objects) {
-                    for(var i = 0, len = dObj.objects.length; i < len; i++) {
-                        pushAnnotation(dObj.objects[i]);
-                    }
-                }
-            }
-        }
-
-        pageData.widgetNotes = anns;
-
         //only trigger the page.data setting if the window is on the mainframe
-        var isMainFrame = false;
         try {
             if(window.name == 'mainFrame' ||
             (!CHROME_5_LOCAL && window.parent.$ && window.parent.$('#mainFrame').length > 0)) {
-                isMainFrame = true;
-
-                $ax.messageCenter.addMessageListener(function(message, data) {
-                    if(message == 'finishInit') {
-                        _processTempInit();
-                    }
-                });
-
+                $axure.messageCenter = $axure.messageCenter;
                 $axure.messageCenter.setState('page.data', pageData);
-                window.focus();
             }
-        } catch(e) { }
+        } catch(e) {}
 
-        //attach here for chrome local
-        $(window).load(function() {
-            $ax.style.initializeObjectTextAlignment($ax('*'));
-        });
+        //        $ax(function(diagramObject) {
+        //            return diagramObject.style.opacity && !diagramObject.isContained;
+        //        }).each(function(diagramObject, elementId) {
+        //            $ax.style.applyOpacityFromStyle(elementId, diagramObject.style);
+        //        });
 
-        if(!isMainFrame) _processTempInit();
-    });
-
-
-    var _processTempInit = function() {
-        //var start = (new Date()).getTime();
-        //var end = (new Date()).getTime();
+        var start = (new Date()).getTime();
+        var end = (new Date()).getTime();
         //window.alert('elapsed ' + (end - start));
+
+        $('input[type=text], input[type=password], textarea').focus(function() {
+            window.lastFocusedControl = this;
+        });
 
         $('iframe').each(function() {
             var origSrc = $(this).attr('basesrc');
 
-            var $this = $(this);
             if(origSrc) {
                 var newSrcUrl = origSrc.toLowerCase().indexOf('http://') == -1 ? $ax.globalVariableProvider.getLinkUrl(origSrc) : origSrc;
-                $this.attr('src', newSrcUrl);
-            }
 
-            if(IOS) {
-                $this.parent().css('overflow', 'auto').css('-webkit-overflow-scrolling', 'touch').css('-ms-overflow-x', 'hidden').css('overflow-x', 'hidden');
+                $(this).attr('src', newSrcUrl);
             }
         });
 
@@ -89,12 +52,10 @@
             }
         });
 
-        window.lastFocusedClickable = null;
-        var _lastFocusedClickableSelector = 'div[tabIndex=0], img[tabIndex=0], input, a';
+        var lastFocusedClickable;
         var shouldOutline = true;
 
-        $ax(function (dObj) { return dObj.tabbable; }).each(function (dObj, elementId) {
-            if ($ax.public.fn.IsLayer(dObj.type)) $ax.event.layerMapFocus(dObj, elementId);
+        $ax(function(dObj) { return dObj.tabbable; }).each(function(dObj, elementId) {
             var focusableId = $ax.event.getFocusableWidgetOrChildId(elementId);
             $('#' + focusableId).attr("tabIndex", 0);
         });
@@ -107,23 +68,23 @@
             shouldOutline = true;
         });
 
-        $(_lastFocusedClickableSelector).focus(function () {
+        $('div[tabIndex=0], img[tabIndex=0], a').focus(function() {
             if(shouldOutline) {
                 $(this).css('outline', '');
             } else {
                 $(this).css('outline', 'none');
             }
 
-            window.lastFocusedClickable = this;
+            lastFocusedClickable = this;
         });
 
-        $(_lastFocusedClickableSelector).blur(function () {
-            if(window.lastFocusedClickable == this) window.lastFocusedClickable = null;
+        $('div[tabIndex=0], img[tabIndex=0], a').blur(function() {
+            if(lastFocusedClickable == this) lastFocusedClickable = null;
         });
 
         $(window.document).bind('keyup', function(e) {
             if(e.keyCode == '13' || e.keyCode == '32') {
-                if(window.lastFocusedClickable) $(window.lastFocusedClickable).click();
+                if(lastFocusedClickable) $(lastFocusedClickable).click();
             }
         });
 
@@ -135,6 +96,10 @@
             });
         }
 
+        $(window).load(function() {
+            $ax.style.initializeObjectTextAlignment($ax('*'));
+        });
+
         if($ax.document.configuration.preventScroll) {
             $(window.document).bind('touchmove', function(e) {
                 var inScrollable = $ax.legacy.GetScrollable(e.target) != window.document.body;
@@ -144,7 +109,7 @@
             });
 
             $ax(function(diagramObject) {
-                return $ax.public.fn.IsDynamicPanel(diagramObject.type) && diagramObject.scrollbars != 'none';
+                return diagramObject.type == 'dynamicPanel' && diagramObject.scrollbars != 'none';
             }).$().children().bind('touchstart', function() {
                 var target = this;
                 var top = target.scrollTop;
@@ -155,7 +120,7 @@
 
         if(OS_MAC && WEBKIT) {
             $ax(function(diagramObject) {
-                return $ax.public.fn.IsComboBox(diagramObject.type);
+                return diagramObject.type == 'comboBox';
             }).each(function(obj, id) {
                 $jobj($ax.INPUT(id)).css('-webkit-appearance', 'menulist-button').css('border-color', '#999999');
             });
@@ -165,22 +130,17 @@
         $ax.event.initialize();
         $ax.style.initialize();
         $ax.visibility.initialize();
-        $ax.repeater.initialize();
         $ax.dynamicPanelManager.initialize(); //needs to be called after visibility is initialized
         $ax.adaptive.initialize();
         $ax.loadDynamicPanelsAndMasters();
         $ax.adaptive.loadFinished();
-        var start = (new Date()).getTime();
-        $ax.repeater.initRefresh();
-        var end = (new Date()).getTime();
-        console.log('loadTime: ' + (end - start) / 1000);
+        $ax.repeater.init();
         $ax.style.prefetch();
 
-        $(window).resize();
-
-        //var readyEnd = (new Date()).getTime();
+        var readyEnd = (new Date()).getTime();
         //window.alert('elapsed ' + (readyEnd - readyStart));
-    };
+    });
+
 });
 
 /* extend canvas */

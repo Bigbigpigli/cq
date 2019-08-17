@@ -9,43 +9,34 @@ $axure.internal(function($ax) {
 
     var _model = $ax.model = {};
 
-    _model.idsInRdoToHideOrLimbo = function(rdoId, scriptIds) {
+    _model.idsInRdo = function(rdoId, elementIds) {
         var rdoScriptId = $ax.repeater.getScriptIdFromElementId(rdoId);
+        var rdoObj = $obj(rdoId);
         var path = $ax.getPathFromScriptId(rdoScriptId);
-        
-        if(!scriptIds) scriptIds = [];
+        var rdoRepeater = $ax.getParentRepeaterFromScriptId(rdoScriptId);
+        var rdoItem = $ax.repeater.getItemIdFromElementId(rdoId);
 
-        var rdo = $ax.getObjectFromElementId(rdoId);
-        var master = $ax.pageData.masters[rdo.masterId];
-        var masterChildren = master.diagram.objects;
-        for(var i = 0; i < masterChildren.length; i++) {
-            var obj = masterChildren[i];
-            var objScriptIds = obj.scriptIds;
-            for(var j = 0; j < objScriptIds.length; j++) {
-                var scriptId = objScriptIds[j];
+        if(!elementIds) elementIds = [];
+        $ax('*').each(function(obj, elementId) {
+            // Make sure in same rdo
+            var scriptId = $ax.repeater.getScriptIdFromElementId(elementId);
+            var elementPath = $ax.getPathFromScriptId(scriptId);
+            // This is because last part of path is for the obj itself.
+            elementPath.pop();
+            if(elementPath.length != path.length) return;
+            for(var i = 0; i < path.length; i++) if(elementPath[i] != path[i]) return;
 
-                // Make sure in same rdo
-                var elementPath = $ax.getPathFromScriptId(scriptId);
+            // If object is in a panel, the panel will be hidden, so the obj doesn't have to be.
+            if(obj.parentDynamicPanel) return;
 
-                // This is because last part of path is for the obj itself.
-                elementPath.pop();
-                if(elementPath.length != path.length) continue;
-                var samePath = true;
-                for(var k = 0; k < path.length; k++) {
-                    if(elementPath[k] != path[k]) {
-                        samePath = false;
-                        break;
-                    }
-                }
-                if(!samePath) continue;
+            var repeater = $ax.getParentRepeaterFromScriptId(scriptId);
+            var item = $ax.repeater.getItemIdFromElementId(elementId);
+            if(repeater != rdoRepeater || item != rdoItem) return;
 
-                if($ax.public.fn.IsReferenceDiagramObject(obj.type)) _model.idsInRdoToHideOrLimbo(scriptId, scriptIds);
-                else if(scriptIds.indexOf(scriptId) == -1) scriptIds.push(scriptId);
-
-                break;
-            }
-        }
-        return scriptIds;
+            if(obj.type == 'referenceDiagramObject') _model.idsInRdo(elementId, elementIds);
+            else elementIds.push(elementId);
+        });
+        return elementIds;
     };
 
 });
